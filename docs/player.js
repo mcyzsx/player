@@ -204,6 +204,15 @@ Player.prototype = {
 
     //progressBar 垂直居中
     progressBar.style.margin = -(window.innerHeight*0.3/2)+'px auto'
+    
+    // 显示进度条时添加提示
+    if (!progressBar.querySelector('.progress-hint')) {
+      const hint = document.createElement('div');
+      hint.className = 'progress-hint';
+      hint.style.cssText = 'position: absolute; bottom: 5px; right: 10px; font-size: 12px; color: rgba(255,255,255,0.5); pointer-events: none;';
+      hint.textContent = '↔ 拖动跳转';
+      progressBar.appendChild(hint);
+    }
 
     document.querySelector('#list-song-'+playNum).style.backgroundColor='';//清除上一首选中
     document.querySelector('#list-song-'+index).style.backgroundColor='rgba(255, 255, 255, 0.1)';//高亮当前播放
@@ -403,6 +412,44 @@ nextBtn.addEventListener('click', function() {
 });
 progressBar.addEventListener('click', function(event) {
   player.seek(event.clientX / window.innerWidth);
+});
+
+// 进度条拖动功能
+let progressDrag = false;
+
+progressBar.addEventListener('mousedown', function(event) {
+  progressDrag = true;
+  player.seek(event.clientX / window.innerWidth);
+});
+
+progressBar.addEventListener('touchstart', function(event) {
+  progressDrag = true;
+  player.seek(event.touches[0].clientX / window.innerWidth);
+});
+
+progressBar.addEventListener('mousemove', function(event) {
+  if (progressDrag) {
+    let per = event.clientX / window.innerWidth;
+    per = Math.min(1, Math.max(0, per));
+    progress.style.width = (per * 100) + '%';
+  }
+});
+
+progressBar.addEventListener('touchmove', function(event) {
+  if (progressDrag) {
+    event.preventDefault();
+    let per = event.touches[0].clientX / window.innerWidth;
+    per = Math.min(1, Math.max(0, per));
+    progress.style.width = (per * 100) + '%';
+  }
+});
+
+document.addEventListener('mouseup', function() {
+  progressDrag = false;
+});
+
+document.addEventListener('touchend', function() {
+  progressDrag = false;
 });
 playlistBtn.addEventListener('click', function() {
   player.togglePlaylist();

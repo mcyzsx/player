@@ -172,9 +172,14 @@ body {
   opacity: 0.8;
   -webkit-user-select: none;
   user-select: none;
+  transition: opacity 0.3s;
 }
 #progressBar:hover {
   opacity: 1;
+}
+#progressBar:active {
+  opacity: 1;
+  cursor: grabbing;
 }
 #progress {
   position: absolute;
@@ -182,8 +187,12 @@ body {
   left: 0;
   width: 0%;
   height: 100%;
-  background-color: rgba(0, 0, 0, 0.1);
+  background-color: rgba(255, 255, 255, 0.3);
   z-index: -1;
+  transition: width 0.1s linear;
+}
+#progressBar:active #progress {
+  background-color: rgba(255, 255, 255, 0.5);
 }
 #waveCanvas{
   position: absolute;
