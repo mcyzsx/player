@@ -4,7 +4,7 @@ let media="https://cdn.jsdmirror.com/gh/mcyzsx/player@main/media/"
 
 
 // Cache references to DOM elements.
-let elms = ['track','artist', 'timer', 'duration','post', 'playBtn', 'pauseBtn', 'prevBtn', 'nextBtn', 'playlistBtn', 'postBtn', 'waveBtn', 'volumeBtn', 'progress', 'progressBar','waveCanvas', 'loading', 'playlist', 'list', 'volume', 'barEmpty', 'barFull', 'sliderBtn'];
+let elms = ['track','artist', 'timer', 'duration','post', 'playBtn', 'pauseBtn', 'prevBtn', 'nextBtn', 'playlistBtn', 'postBtn', 'waveBtn', 'volumeBtn', 'progress', 'progressBar', 'progressContainer','waveCanvas', 'loading', 'playlist', 'list', 'volume', 'barEmpty', 'barFull', 'sliderBtn'];
 elms.forEach(function(elm) {
   window[elm] = document.getElementById(elm);
 });
@@ -33,6 +33,11 @@ request.onload=function(){
   else{playNum=jsonData.length-1} //默认最近添加的
 
     player = new Player(jsonData);
+    
+    // 初始化播放模式图标
+    if (typeof updatePlayModeIcon === 'function') {
+      updatePlayModeIcon();
+    }
 }
 
 function isMobile() {
@@ -47,6 +52,10 @@ function isMobile() {
 let Player = function(playlist) {
   this.playlist = playlist;
   this.index = playNum;
+  
+  // 播放模式：'list' (列表循环), 'one' (单首循环), 'shuffle' (随机循环)
+  this.playMode = 'list';
+  this.shuffleOrder = []; // 存储随机播放时的顺序
 
   // Display the title of the first track.
   track.innerHTML =  playlist[this.index].title;
@@ -95,25 +104,31 @@ Player.prototype = {
           requestAnimationFrame(self.step.bind(self));
 
           // Start the wave animation if we have already loaded
-          progressBar.style.display = 'block';
+          progressContainer.style.display = 'block';
           pauseBtn.style.display = 'block';
         },
         onload: function() {
           // Start the wave animation.
-          progressBar.style.display = 'block';
+          progressContainer.style.display = 'block';
           loading.style.display = 'none';
         },
         onend: function() {
           // Stop the wave animation.
-          self.skip('next');
+          if (self.playMode === 'one') {
+            // 单首循环：重新播放当前歌曲
+            self.skipTo(self.index);
+          } else {
+            // 其他模式：播放下一首
+            self.skip('next');
+          }
         },
         onpause: function() {
           // Stop the wave animation.
-          progressBar.style.display = 'none';
+          progressContainer.style.display = 'none';
         },
         onstop: function() {
           // Stop the wave animation.
-          progressBar.style.display = 'none';
+          progressContainer.style.display = 'none';
         },
         onseek: function() {
           // Start updating the progress of the track.
@@ -202,18 +217,6 @@ Player.prototype = {
     document.querySelector('meta[property="og:url"]').setAttribute('content', window.location.href);
     document.querySelector('meta[property="og:image"]').setAttribute('content', media+ encodeURI(data.pic));
 
-    //progressBar 垂直居中
-    progressBar.style.margin = -(window.innerHeight*0.3/2)+'px auto'
-    
-    // 显示进度条时添加提示
-    if (!progressBar.querySelector('.progress-hint')) {
-      const hint = document.createElement('div');
-      hint.className = 'progress-hint';
-      hint.style.cssText = 'position: absolute; bottom: 5px; right: 10px; font-size: 12px; color: rgba(255,255,255,0.5); pointer-events: none;';
-      hint.textContent = '↔ 拖动跳转';
-      progressBar.appendChild(hint);
-    }
-
     document.querySelector('#list-song-'+playNum).style.backgroundColor='';//清除上一首选中
     document.querySelector('#list-song-'+index).style.backgroundColor='rgba(255, 255, 255, 0.1)';//高亮当前播放
     playNum=index;
@@ -255,24 +258,101 @@ Player.prototype = {
     pauseBtn.style.display = 'none';
   },
 
+  //切换播放模式
+  togglePlayMode: function() {
+    const modes = ['list', 'one', 'shuffle'];
+    let currentIndex = modes.indexOf(this.playMode);
+    let nextIndex = (currentIndex + 1) % modes.length;
+    this.playMode = modes[nextIndex];
+    
+    // 如果切换到随机模式，生成随机顺序
+    if (this.playMode === 'shuffle') {
+      this.generateShuffleOrder();
+    }
+    
+    console.log("当前播放模式:", this.getPlayModeName());
+    return this.playMode;
+  },
+  
+  //获取播放模式名称
+  getPlayModeName: function() {
+    const names = {
+      'list': '列表循环',
+      'one': '单首循环',
+      'shuffle': '随机播放'
+    };
+    return names[this.playMode] || '未知模式';
+  },
+  
+  //生成随机播放顺序
+  generateShuffleOrder: function() {
+    this.shuffleOrder = [];
+    let indices = [];
+    for (let i = 0; i < this.playlist.length; i++) {
+      indices.push(i);
+    }
+    
+    // Fisher-Yates 洗牌算法
+    for (let i = indices.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [indices[i], indices[j]] = [indices[j], indices[i]];
+    }
+    
+    this.shuffleOrder = indices;
+  },
+  
+  //获取随机模式下的下一首索引
+  getNextShuffleIndex: function() {
+    if (this.shuffleOrder.length === 0) {
+      this.generateShuffleOrder();
+    }
+    
+    let currentPos = this.shuffleOrder.indexOf(this.index);
+    let nextPos = (currentPos + 1) % this.shuffleOrder.length;
+    return this.shuffleOrder[nextPos];
+  },
+
   /**
    * Skip to the next or previous track.
    * @param  {String} direction 'next' or 'prev'.
    */
   skip: function(direction) {
     let self = this;
-
-    // Get the next track based on the direction of the track.
     let index = 0;
-    if (direction === 'next') {
-      index = self.index - 1;
-      if (index < 0) {
-        index = self.playlist.length - 1;
+
+    // 根据播放模式决定下一首
+    if (self.playMode === 'one') {
+      // 单首循环：跳过当前歌曲（实际上是重播）
+      if (direction === 'next') {
+        // 播放下一首（列表循环）
+        index = self.index - 1;
+        if (index < 0) {
+          index = self.playlist.length - 1;
+        }
+      } else {
+        // 播放上一首
+        index = self.index + 1;
+        if (index >= self.playlist.length) {
+          index = 0;
+        }
       }
+      // 切换到列表循环模式（用户体验考虑）
+      self.playMode = 'list';
+    } else if (self.playMode === 'shuffle') {
+      // 随机播放
+      index = self.getNextShuffleIndex();
     } else {
-      index = self.index + 1;
-      if (index >= self.playlist.length) {
-        index = 0;
+      // 列表循环（默认）
+      if (direction === 'next') {
+        index = self.index - 1;
+        if (index < 0) {
+          index = self.playlist.length - 1;
+        }
+      } else {
+        index = self.index + 1;
+        if (index >= self.playlist.length) {
+          index = 0;
+        }
       }
     }
 
@@ -410,35 +490,62 @@ prevBtn.addEventListener('click', function() {
 nextBtn.addEventListener('click', function() {
   player.skip('next');
 });
-progressBar.addEventListener('click', function(event) {
-  player.seek(event.clientX / window.innerWidth);
+
+// 播放模式按钮事件
+playModeBtn.addEventListener('click', function() {
+  player.togglePlayMode();
+  updatePlayModeIcon();
+});
+
+// 更新播放模式图标
+function updatePlayModeIcon() {
+  const icons = {
+    'list': "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'%3E%3Cpath fill='%23fff' d='M0 128C0 92.7 28.7 64 64 64H448c35.3 0 64 28.7 64 64V384c0 35.3-28.7 64-64 64H64c-35.3 0-64-28.7-64-64V128zm64 32v64c0 17.7 14.3 32 32 32H352c17.7 0 32-14.3 32-32V160c0-17.7-14.3-32-32-32H96c-17.7 0-32 14.3-32 32zM80 320c-13.3 0-24 10.7-24 24s10.7 24 24 24h64c13.3 0 24-10.7 24-24s-10.7-24-24-24H80zm136 0c-13.3 0-24 10.7-24 24s10.7 24 24 24h64c13.3 0 24-10.7 24-24s-10.7-24-24-24H216z'/%3E%3C/svg%3E",
+    'one': "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'%3E%3Cpath fill='%23fff' d='M232 192V336c0 14.3 7.8 27.9 19.7 35.1l10.6 6.6c12.4 7.8 28.1 7.8 40.5-.2L447 371.4c13.2 8.3 21.2 22.6 21.2 38.6c0 26.5-21.5 48-48 48H144c-26.5 0-48-21.5-48-48V240c0-26.5 21.5-48 48-48h208c4.4 0 8.7 2.2 11.3 6.1l6.5 9.7c3.4 5.3 10.5 7.6 15.9 5.1l29.2-13.6c12.6-5.9 27.8-4.2 37.9 4.2c11.7 9.7 13.2 26.9 3.4 38.4L343.6 292c-8.4 9.8-8.4 24.3 0 34.1l26.5 21.4c9.1 7.3 21.5 6.9 30.2-1.1c9.8-9 11.6-23.7 4.2-35.2l-21.4-33.6c-10-15.5-30.8-20.3-45.8-10.5l-29.2 19.1c-6.1 4-13.2 6.1-20.4 6.1H80c-13.3 0-24-10.7-24-24s10.7-24 24-24H232zM48 240v224c0 13.3 10.7 24 24 24H416c13.3 0 24-10.7 24-24V240c0-13.3-10.7-24-24-24H72c-13.3 0-24 10.7-24 24z'/%3E%3C/svg%3E",
+    'shuffle': "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'%3E%3Cpath fill='%23fff' d='M40 48C26.7 48 16 58.7 16 72v48c0 13.3 10.7 24 24 24H88c13.3 0 24-10.7 24-24V72c0-13.3-10.7-24-24-24H40zM192 64c-17.7 0-32 14.3-32 32s14.3 32 32 32H480c17.7 0 32-14.3 32-32s-14.3-32-32-32H192zm0 160c-17.7 0-32 14.3-32 32s14.3 32 32 32H480c17.7 0 32-14.3 32-32s-14.3-32-32-32H192zm0 160c-17.7 0-32 14.3-32 32s14.3 32 32 32H480c17.7 0 32-14.3 32-32s-14.3-32-32-32H192zM16 232v48c0 13.3 10.7 24 24 24H88c13.3 0 24-10.7 24-24V232c0-13.3-10.7-24-24-24H40c-13.3 0-24 10.7-24 24zM40 368c-13.3 0-24 10.7-24 24v48c0 13.3 10.7 24 24 24H88c13.3 0 24-10.7 24-24V392c0-13.3-10.7-24-24-24H40z'/%3E%3C/svg%3E"
+  };
+  
+  playModeBtn.style.backgroundImage = 'url("' + icons[player.playMode] + '")';
+  playModeBtn.title = '当前: ' + player.getPlayModeName() + ' (点击切换)';
+}
+progressContainer.addEventListener('click', function(event) {
+  let rect = progressBar.getBoundingClientRect();
+  let per = (event.clientX - rect.left) / rect.width;
+  per = Math.min(1, Math.max(0, per));
+  player.seek(per);
 });
 
 // 进度条拖动功能
 let progressDrag = false;
 
-progressBar.addEventListener('mousedown', function(event) {
+progressContainer.addEventListener('mousedown', function(event) {
   progressDrag = true;
-  player.seek(event.clientX / window.innerWidth);
+  let rect = progressBar.getBoundingClientRect();
+  let per = (event.clientX - rect.left) / rect.width;
+  player.seek(per);
 });
 
-progressBar.addEventListener('touchstart', function(event) {
+progressContainer.addEventListener('touchstart', function(event) {
   progressDrag = true;
-  player.seek(event.touches[0].clientX / window.innerWidth);
+  let rect = progressBar.getBoundingClientRect();
+  let per = (event.touches[0].clientX - rect.left) / rect.width;
+  player.seek(per);
 });
 
-progressBar.addEventListener('mousemove', function(event) {
+progressContainer.addEventListener('mousemove', function(event) {
   if (progressDrag) {
-    let per = event.clientX / window.innerWidth;
+    let rect = progressBar.getBoundingClientRect();
+    let per = (event.clientX - rect.left) / rect.width;
     per = Math.min(1, Math.max(0, per));
     progress.style.width = (per * 100) + '%';
   }
 });
 
-progressBar.addEventListener('touchmove', function(event) {
+progressContainer.addEventListener('touchmove', function(event) {
   if (progressDrag) {
     event.preventDefault();
-    let per = event.touches[0].clientX / window.innerWidth;
+    let rect = progressBar.getBoundingClientRect();
+    let per = (event.touches[0].clientX - rect.left) / rect.width;
     per = Math.min(1, Math.max(0, per));
     progress.style.width = (per * 100) + '%';
   }
@@ -545,6 +652,10 @@ document.addEventListener('keyup', function(event) {
   else if(event.key == "p"|| event.key === "P"){player.togglePost();}
   else if(event.key == "w"|| event.key === "W"){player.toggleWave();}
   else if(event.key == "v"|| event.key === "V"){player.toggleVolume();}
+  else if(event.key == "m"|| event.key === "M"){
+    player.togglePlayMode();
+    updatePlayModeIcon();
+  }
 });
 
 console.log("\n %c Gmemp v3.4.8 %c https://github.com/Meekdai/Gmemp \n", "color: #fff; background-image: linear-gradient(90deg, rgb(47, 172, 178) 0%, rgb(45, 190, 96) 100%); padding:5px 1px;", "background-image: linear-gradient(90deg, rgb(45, 190, 96) 0%, rgb(255, 255, 255) 100%); padding:5px 0;");
