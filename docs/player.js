@@ -1,29 +1,5 @@
 let media="https://cdn.jsdmirror.com/gh/mcyzsx/player@main/media/"
 
-// 备用本地媒体路径配置
-let fallbackMedia = "./media/"
-
-// 检查CDN是否可用的函数
-function checkCDNAvailability() {
-    return fetch(media + "test", { method: 'HEAD' })
-        .then(response => response.ok)
-        .catch(() => false);
-}
-
-// 动态设置媒体路径的函数
-async function setMediaPath() {
-    try {
-        const isAvailable = await checkCDNAvailability();
-        if (!isAvailable) {
-            console.warn("CDN不可用，切换到本地媒体文件");
-            return fallbackMedia;
-        }
-        return media;
-    } catch (error) {
-        console.warn("CDN检查失败，使用本地媒体文件", error);
-        return fallbackMedia;
-    }
-}
 
 // Cache references to DOM elements.
 let elms = ['track','artist', 'timer', 'duration','post', 'playBtn', 'pauseBtn', 'prevBtn', 'nextBtn', 'playlistBtn', 'postBtn', 'waveBtn', 'volumeBtn', 'progress', 'progressBar','waveCanvas', 'loading', 'playlist', 'list', 'volume', 'barEmpty', 'barFull', 'sliderBtn'];
@@ -40,13 +16,9 @@ let request=new XMLHttpRequest();
 request.open("GET",requestJson);
 request.responseType='text';
 request.send();
-request.onload=async function(){
+request.onload=function(){
     jsonData=JSON.parse(request.response);
     console.log(jsonData);
-
-    // 动态设置媒体路径
-    const currentMediaPath = await setMediaPath();
-    console.log("当前使用的媒体路径:", currentMediaPath);
 
     if(window.location.hash!=''){
       try{
@@ -58,7 +30,7 @@ request.onload=async function(){
   }
   else{playNum=jsonData.length-1} //默认最近添加的
 
-    player = new Player(jsonData, currentMediaPath);
+    player = new Player(jsonData);
 }
 
 function isMobile() {
@@ -70,17 +42,16 @@ function isMobile() {
  * Includes all methods for playing, skipping, updating the display, etc.
  * @param {Array} playlist Array of objects with playlist song details ({title, file, howl}).
  */
-let Player = function(playlist, mediaPath) {
+let Player = function(playlist) {
   this.playlist = playlist;
   this.index = playNum;
-  this.mediaPath = mediaPath || media; // 使用传入的路径或默认路径
 
   // Display the title of the first track.
   track.innerHTML =  playlist[this.index].title;
   artist.innerHTML =  playlist[this.index].artist;
-  document.querySelector("body").style.backgroundImage = "url('" +this.mediaPath+ encodeURI(playlist[this.index].pic) + "')";
+  document.querySelector("body").style.backgroundImage = "url('" +media+ encodeURI(playlist[this.index].pic) + "')";
   post.innerHTML = '<p><b>'+playlist[this.index].date+'</b></p>' + playlist[this.index].article;
-  document.querySelector('meta[property="og:image"]').setAttribute('content', this.mediaPath+ encodeURI(playlist[this.index].pic));
+  document.querySelector('meta[property="og:image"]').setAttribute('content', media+ encodeURI(playlist[this.index].pic));
 
   // Setup the playlist display.
   playlist.forEach(function(song) {
@@ -112,7 +83,7 @@ Player.prototype = {
       sound = data.howl;
     } else {
       sound = data.howl = new Howl({
-        src: [this.mediaPath + data.mp3],
+        src: [media + data.mp3],
         html5: isMobile(), // Force to HTML5 so that the audio can stream in (best for large files).
         onplay: function() {
           // Display the duration.
@@ -154,7 +125,7 @@ Player.prototype = {
 
     // 手机系统控制映射
     if ('mediaSession' in navigator) {
-      const artworkUrl = this.mediaPath + encodeURI(data.pic);
+      const artworkUrl = media + encodeURI(data.pic);
       const img = new Image();
 
       const applyMediaSession = (artwork) => {
@@ -221,13 +192,13 @@ Player.prototype = {
     artist.innerHTML =  data.artist;
     post.innerHTML = '<p><b>'+data.date+'</b></p>'+data.article;
     document.title=data.title + " - Gmemp";//显示浏览器TAB栏内容
-    document.querySelector("body").style.backgroundImage = "url('" +this.mediaPath+ encodeURI(data.pic) + "')";
+    document.querySelector("body").style.backgroundImage = "url('" +media+ encodeURI(data.pic) + "')";
     window.location.hash="#"+(index);
 
     document.querySelector('meta[property="og:title"]').setAttribute('content', data.title);
     document.querySelector('meta[property="og:description"]').setAttribute('content', data.article);
     document.querySelector('meta[property="og:url"]').setAttribute('content', window.location.href);
-    document.querySelector('meta[property="og:image"]').setAttribute('content', this.mediaPath+ encodeURI(data.pic));
+    document.querySelector('meta[property="og:image"]').setAttribute('content', media+ encodeURI(data.pic));
 
     //progressBar 垂直居中
     progressBar.style.margin = -(window.innerHeight*0.3/2)+'px auto'
