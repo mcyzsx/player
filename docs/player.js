@@ -1,4 +1,4 @@
-let media="https://cdn.jsdmirror.com/gh/mcyzsx/player@main/media/"
+let media="https://cdn.jsdelivr.net/gh/mcyzsx/player@main/media/"
 
 
 // Cache references to DOM elements.
